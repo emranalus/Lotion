@@ -11,7 +11,7 @@ body {
 .navbar {
   background: #9b59b6; /* Brighter purple */
   color: white;
-  padding: 15px 30px;
+  padding: 15px 20px;
   font-size: 1.5rem;
   font-weight: bold;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
@@ -20,6 +20,7 @@ body {
 /* Task input area */
 .task-input {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   align-items: center;
   gap: 10px;
@@ -30,8 +31,9 @@ body {
   padding: 8px 12px;
   border-radius: 6px;
   border: 1px solid #ccc;
-  flex: 1;
+  flex: 1 1 200px;
   font-size: 1rem;
+  min-width: 120px;
 }
 
 .task-input select {
@@ -39,6 +41,7 @@ body {
   border-radius: 6px;
   border: 1px solid #ccc;
   font-size: 1rem;
+  min-width: 120px;
 }
 
 .task-input button {
@@ -53,7 +56,7 @@ body {
 }
 
 .task-input button:hover {
-  background: #7d3bb0; /* Slightly darker on hover */
+  background: #7d3bb0;
 }
 
 /* Columns layout */
@@ -62,6 +65,7 @@ body {
   gap: 20px;
   padding: 0 20px;
   overflow-x: auto;
+  flex-wrap: wrap;
 }
 
 /* Column card */
@@ -69,14 +73,15 @@ body {
   background: white;
   padding: 15px;
   border-radius: 10px;
-  flex: 0 0 300px;
+  flex: 1 1 300px; /* responsive width */
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+  min-width: 280px;
 }
 
 .column h2 {
   margin-top: 0;
   font-size: 1.2rem;
-  color: #9b59b6; /* Brighter purple */
+  color: #9b59b6;
 }
 
 /* Tasks */
@@ -135,4 +140,29 @@ body {
 
 .delete-btn:hover {
   background: #c14f7f;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .columns {
+    flex-direction: column;
+    padding: 0 10px;
+  }
+
+  .column {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: unset;
+  }
+
+  .task-input {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .task-input input,
+  .task-input select,
+  .task-input button {
+    width: 100%;
+  }
 }
