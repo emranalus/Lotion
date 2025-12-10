@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -11,13 +11,46 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { useLocalStorage } from "./hooks/useLocalStorage";
 import type { Task } from "./types";
 import Column from "./components/Column";
+import Login from "./components/Login";
 import "./index.css";
 
+// Firebase imports
+import { initializeApp } from "firebase/app";
+import { getAuth, onAuthStateChanged, signOut, type User } from "firebase/auth";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  query,
+  orderBy
+} from "firebase/firestore";
+
+// Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyB7xIsVFh7km2bIygL3PkPHuWXaARxDe4I",
+  authDomain: "lotion-firebase.firebaseapp.com",
+  projectId: "lotion-firebase",
+  storageBucket: "lotion-firebase.firebasestorage.app",
+  messagingSenderId: "929909504872",
+  appId: "1:929909504872:web:7bc7f6616a3ebb7682b4dd",
+  measurementId: "G-DZHVC5B4KC"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
 function App() {
-  const [tasks, setTasks] = useLocalStorage<Task[]>("tasks", []);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [activeColumn, setActiveColumn] = useState<Task["column"]>("Not Started");
   const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -31,32 +64,84 @@ function App() {
     })
   );
 
-  const addTask = () => {
+  // Auth state listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Firestore real-time listener
+  useEffect(() => {
+    if (!user) {
+      setTasks([]);
+      return;
+    }
+
+    const tasksRef = collection(db, "users", user.uid, "tasks");
+    const q = query(tasksRef, orderBy("title"));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const tasksData: Task[] = [];
+      snapshot.forEach((doc) => {
+        tasksData.push({ id: doc.id, ...doc.data() } as Task);
+      });
+      setTasks(tasksData);
+    });
+
+    return unsubscribe;
+  }, [user]);
+
+  const addTask = async () => {
     const title = newTaskTitle.trim();
-    if (!title) return;
+    if (!title || !user) return;
 
-    setTasks((prevTasks) => [
-      ...prevTasks,
-      { id: crypto.randomUUID(), title, column: activeColumn },
-    ]);
-
-    setNewTaskTitle("");
+    try {
+      const tasksRef = collection(db, "users", user.uid, "tasks");
+      await addDoc(tasksRef, {
+        title,
+        column: activeColumn,
+      });
+      setNewTaskTitle("");
+    } catch (error) {
+      console.error("Error adding task:", error);
+      alert("Failed to add task. Please try again.");
+    }
   };
 
-  const moveTask = (taskId: string, targetColumn: Task["column"]) => {
-    setTasks((prevTasks) =>
-      prevTasks.map((t) => (t.id === taskId ? { ...t, column: targetColumn } : t))
-    );
+  const moveTask = async (taskId: string, targetColumn: Task["column"]) => {
+    if (!user) return;
+
+    try {
+      const taskRef = doc(db, "users", user.uid, "tasks", taskId);
+      await updateDoc(taskRef, { column: targetColumn });
+    } catch (error) {
+      console.error("Error moving task:", error);
+    }
   };
 
-  const updateTask = (taskId: string, newTitle: string) => {
-    setTasks((prevTasks) =>
-      prevTasks.map((t) => (t.id === taskId ? { ...t, title: newTitle } : t))
-    );
+  const updateTask = async (taskId: string, newTitle: string) => {
+    if (!user) return;
+
+    try {
+      const taskRef = doc(db, "users", user.uid, "tasks", taskId);
+      await updateDoc(taskRef, { title: newTitle });
+    } catch (error) {
+      console.error("Error updating task:", error);
+    }
   };
 
-  const deleteTask = (taskId: string) => {
-    setTasks((prevTasks) => prevTasks.filter((t) => t.id !== taskId));
+  const deleteTask = async (taskId: string) => {
+    if (!user) return;
+
+    try {
+      const taskRef = doc(db, "users", user.uid, "tasks", taskId);
+      await deleteDoc(taskRef);
+    } catch (error) {
+      console.error("Error deleting task:", error);
+    }
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -102,20 +187,28 @@ function App() {
       // Same column - handle reordering
       const overTask = tasks.find((t) => t.id === over.id);
       if (overTask && active.id !== over.id) {
-        setTasks((prevTasks) => {
-          const columnTasks = prevTasks.filter((t) => t.column === activeTask.column);
-          const activeIndex = columnTasks.findIndex((t) => t.id === active.id);
-          const overIndex = columnTasks.findIndex((t) => t.id === over.id);
-
-          const reorderedColumnTasks = arrayMove(columnTasks, activeIndex, overIndex);
-
-          // Merge reordered tasks with tasks from other columns
-          const otherTasks = prevTasks.filter((t) => t.column !== activeTask.column);
-          return [...otherTasks, ...reorderedColumnTasks];
-        });
+        // Note: Firestore reordering would require a position field
+        // For now, we'll skip reordering in Firestore
+        console.log("Reordering within same column - not implemented in Firestore");
       }
     }
   };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
+
+  if (loading) {
+    return <div className="loading">Loading...</div>;
+  }
+
+  if (!user) {
+    return <Login onLogin={() => { }} />;
+  }
 
   return (
     <DndContext
@@ -128,6 +221,12 @@ function App() {
       <div className="app-container">
         <header className="navbar">
           <h1>Lotion</h1>
+          <div className="user-info">
+            <span className="user-email">{user.email}</span>
+            <button onClick={handleSignOut} className="signout-btn">
+              Sign Out
+            </button>
+          </div>
         </header>
 
         <div className="task-input">
@@ -165,9 +264,9 @@ function App() {
         </div>
       </div>
 
-      <DragOverlay>
+      <DragOverlay dropAnimation={{ duration: 0 }}>
         {activeTask ? (
-          <div className="task-card" style={{ opacity: 0.8 }}>
+          <div className="task-card" style={{ opacity: 0.5 }}>
             <span className="task-title">{activeTask.title}</span>
           </div>
         ) : null}

@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import type { Task } from "../types";
 
 interface TaskCardProps {
@@ -19,14 +18,10 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, updateTask, deleteTask }) => 
     attributes,
     listeners,
     setNodeRef,
-    transform,
-    transition,
     isDragging,
   } = useSortable({ id: task.id });
 
   const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
     opacity: isDragging ? 0.5 : 1,
   };
 
