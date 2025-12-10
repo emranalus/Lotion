@@ -10,7 +10,7 @@ import {
   type DragStartEvent,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import type { Task } from "./types";
 import Column from "./components/Column";
 import Login from "./components/Login";
@@ -31,7 +31,10 @@ import {
   orderBy
 } from "firebase/firestore";
 
-// Firebase configuration
+// ============================================================================
+// FIREBASE CONFIGURATION
+// ============================================================================
+
 const firebaseConfig = {
   apiKey: "AIzaSyB7xIsVFh7km2bIygL3PkPHuWXaARxDe4I",
   authDomain: "lotion-firebase.firebaseapp.com",
@@ -42,21 +45,36 @@ const firebaseConfig = {
   measurementId: "G-DZHVC5B4KC"
 };
 
-// Initialize Firebase
+// Initialize Firebase services
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// ============================================================================
+// MAIN APP COMPONENT
+// ============================================================================
+
 function App() {
+  // ----------------------------------------------------------------------------
+  // STATE MANAGEMENT
+  // ----------------------------------------------------------------------------
+
+  // Authentication state
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Task management state
   const [tasks, setTasks] = useState<Task[]>([]);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [activeColumn, setActiveColumn] = useState<Task["column"]>("Not Started");
+
+  // Drag and drop state
   const [activeTask, setActiveTask] = useState<Task | null>(null);
 
+  // Column definitions
   const columns: Task["column"][] = ["Not Started", "In Progress", "Done"];
 
+  // Drag and drop sensors configuration
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -64,7 +82,14 @@ function App() {
     })
   );
 
-  // Auth state listener
+  // ----------------------------------------------------------------------------
+  // SIDE EFFECTS
+  // ----------------------------------------------------------------------------
+
+  /**
+   * Monitor authentication state changes
+   * Sets up a listener for when user signs in or out
+   */
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -73,7 +98,11 @@ function App() {
     return unsubscribe;
   }, []);
 
-  // Firestore real-time listener
+  /**
+   * Real-time Firestore listener for tasks
+   * Syncs tasks from Firestore database when user is authenticated
+   * Tasks are ordered alphabetically by title
+   */
   useEffect(() => {
     if (!user) {
       setTasks([]);
@@ -94,6 +123,14 @@ function App() {
     return unsubscribe;
   }, [user]);
 
+  // ----------------------------------------------------------------------------
+  // TASK CRUD OPERATIONS
+  // ----------------------------------------------------------------------------
+
+  /**
+   * Add a new task to Firestore
+   * Creates a task in the currently selected column
+   */
   const addTask = async () => {
     const title = newTaskTitle.trim();
     if (!title || !user) return;
@@ -111,6 +148,11 @@ function App() {
     }
   };
 
+  /**
+   * Move a task to a different column
+   * @param taskId - The ID of the task to move
+   * @param targetColumn - The column to move the task to
+   */
   const moveTask = async (taskId: string, targetColumn: Task["column"]) => {
     if (!user) return;
 
@@ -122,6 +164,11 @@ function App() {
     }
   };
 
+  /**
+   * Update a task's title
+   * @param taskId - The ID of the task to update
+   * @param newTitle - The new title for the task
+   */
   const updateTask = async (taskId: string, newTitle: string) => {
     if (!user) return;
 
@@ -133,6 +180,10 @@ function App() {
     }
   };
 
+  /**
+   * Delete a task from Firestore
+   * @param taskId - The ID of the task to delete
+   */
   const deleteTask = async (taskId: string) => {
     if (!user) return;
 
@@ -144,34 +195,42 @@ function App() {
     }
   };
 
+  // ----------------------------------------------------------------------------
+  // DRAG AND DROP HANDLERS
+  // ----------------------------------------------------------------------------
+
+  /**
+   * Handle drag start event
+   * Stores the task being dragged for the DragOverlay
+   */
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
     const task = tasks.find((t) => t.id === active.id);
     setActiveTask(task || null);
   };
 
-  const handleDragOver = () => {
-    // All state changes handled in handleDragEnd
-  };
-
+  /**
+   * Handle drag end event
+   * Moves the task to the target column when dropped
+   * Note: Reordering within same column is not yet implemented in Firestore
+   */
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    setActiveTask(null);
+    setActiveTask(null); // Clear the drag overlay
 
     if (!over) return;
 
     const activeTask = tasks.find((t) => t.id === active.id);
     if (!activeTask) return;
 
-    // Determine the target column
+    // Determine the target column based on where the task was dropped
     let targetColumn: Task["column"] | undefined;
 
-    // First, check if we dropped on a droppable column area
     if (over.data?.current?.type === "column") {
+      // Dropped on empty column area
       targetColumn = over.data.current.column as Task["column"];
-    }
-    // Otherwise, check if we dropped on a task
-    else {
+    } else {
+      // Dropped on another task
       const overTask = tasks.find((t) => t.id === over.id);
       if (overTask) {
         targetColumn = overTask.column;
@@ -180,20 +239,23 @@ function App() {
 
     if (!targetColumn) return;
 
-    // If the column changed, use moveTask function
+    // Move task if column changed
     if (activeTask.column !== targetColumn) {
       moveTask(active.id as string, targetColumn);
     } else {
-      // Same column - handle reordering
-      const overTask = tasks.find((t) => t.id === over.id);
-      if (overTask && active.id !== over.id) {
-        // Note: Firestore reordering would require a position field
-        // For now, we'll skip reordering in Firestore
-        console.log("Reordering within same column - not implemented in Firestore");
-      }
+      // Reordering within same column - not yet implemented
+      // Would require adding a position/order field to Firestore
+      console.log("Reordering within same column - not implemented in Firestore");
     }
   };
 
+  // ----------------------------------------------------------------------------
+  // AUTHENTICATION HANDLERS
+  // ----------------------------------------------------------------------------
+
+  /**
+   * Sign out the current user
+   */
   const handleSignOut = async () => {
     try {
       await signOut(auth);
@@ -202,23 +264,30 @@ function App() {
     }
   };
 
+  // ----------------------------------------------------------------------------
+  // RENDER
+  // ----------------------------------------------------------------------------
+
+  // Show loading state while checking authentication
   if (loading) {
     return <div className="loading">Loading...</div>;
   }
 
+  // Show login page if user is not authenticated
   if (!user) {
     return <Login onLogin={() => { }} />;
   }
 
+  // Main application UI
   return (
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
       onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
       <div className="app-container">
+        {/* Navigation bar with user info and sign out */}
         <header className="navbar">
           <h1>Lotion</h1>
           <div className="user-info">
@@ -229,6 +298,7 @@ function App() {
           </div>
         </header>
 
+        {/* Task input form */}
         <div className="task-input">
           <select
             value={activeColumn}
@@ -250,6 +320,7 @@ function App() {
           <button onClick={addTask}>Add Task</button>
         </div>
 
+        {/* Task columns */}
         <div className="columns">
           {columns.map((col) => (
             <Column
@@ -264,6 +335,7 @@ function App() {
         </div>
       </div>
 
+      {/* Drag overlay - shows semi-transparent card following cursor */}
       <DragOverlay dropAnimation={{ duration: 0 }}>
         {activeTask ? (
           <div className="task-card" style={{ opacity: 0.5 }}>
