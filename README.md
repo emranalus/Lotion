@@ -4,4 +4,4 @@
 <img alt="firebase_badge" src="https://img.shields.io/badge/Firebase-Latest-orange?style=for-the-badge" />
 <p/>
 
-<img src="https://github.com/emranalus/Lotion/tree/main/src/img" alt="Lotion1" width="200" height="200" />
+<img src="https://github.com/emranalus/Lotion/tree/main/src/img/Lotion1.png" alt="Lotion1" width="200" height="200" />
