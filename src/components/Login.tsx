@@ -40,14 +40,39 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             }
             onLogin();
         } catch (err: any) {
-            setError(err.message || "Authentication failed");
+            // Parse Firebase errors into user-friendly messages
+            const errorCode = err.code;
+            const EMAIL_OR_PASSWORD_IS_INCORRECT = 'Email or password is incorrect. Please try again.';
+
+            switch (errorCode) {
+                case 'auth/email-already-in-use':
+                    setError('This email is already registered. Please sign in instead.');
+                    break;
+                case 'auth/weak-password':
+                    setError('Password should be at least 6 characters long.');
+                    break;
+                case 'auth/user-not-found':
+                    setError(EMAIL_OR_PASSWORD_IS_INCORRECT);
+                    break;
+                case 'auth/wrong-password':
+                    setError(EMAIL_OR_PASSWORD_IS_INCORRECT);
+                    break;
+                case 'auth/invalid-email':
+                    setError('Please enter a valid email address.');
+                    break;
+                case 'auth/too-many-requests':
+                    setError('Too many failed attempts. Please try again later.');
+                    break;
+                default:
+                    setError(err.message || 'Authentication failed. Please try again.');
+            }
         }
     };
 
     return (
         <div className="login-container">
             <div className="login-card">
-                <h1>🎯 Lotion</h1>
+                <h1>Lotion</h1>
                 <h2>{isSignUp ? "Create Account" : "Sign In"}</h2>
 
                 <form onSubmit={handleSubmit}>
@@ -59,7 +84,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder="Enter your email"
+                            placeholder="guest@example.com"
                             required
                         />
                     </div>
@@ -72,7 +97,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            placeholder="Enter your password"
+                            placeholder="123456"
                             required
                             minLength={6}
                         />
