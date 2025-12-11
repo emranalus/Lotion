@@ -5,7 +5,7 @@
   <img alt="firebase_badge" src="https://img.shields.io/badge/Firebase-Latest-orange?style=for-the-badge" />
   <br><br>
   <img src="./src/img/Lotion1.png" alt="Lotion login panel" />
-  <p><sub>Lightweight EPUB Reader</sub></p>
+  <p align="center"><sub>Lightweight EPUB Reader</sub></p>
   
 <p/>
 
