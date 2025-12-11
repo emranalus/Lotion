@@ -8,8 +8,9 @@
   <img src="./src/img/Lotion1.png" alt="Lotion login panel" />
   Lightweight login panel.</p>
   <br><br>
-
+  <p align="center">
+  <img src="./src/img/Lotion2.png" alt="Lotion login panel" />
+  Lotion dashboard.</p>
+  <br><br>
   
 <p/>
-
-
