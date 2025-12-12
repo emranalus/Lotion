@@ -15,11 +15,12 @@ interface ColumnProps {
   title: string;
   tasks: TaskType[];
   moveTask: (taskId: string, targetColumn: TaskType["column"]) => void;
-  updateTask: (taskId: string, newTitle: string) => void;
+  updateTask: (taskId: string, data: Partial<TaskType>) => void;
   deleteTask: (taskId: string) => void;
+  addNotification: (message: string, type: "error" | "success" | "info") => void;
 }
 
-export default function Column({ title, tasks, moveTask, updateTask, deleteTask }: ColumnProps) {
+export default function Column({ title, tasks, moveTask, updateTask, deleteTask, addNotification }: ColumnProps) {
   /**
    * Setup droppable area for this column
    * Passes column metadata so we can detect which column a task is dropped on
@@ -56,6 +57,7 @@ export default function Column({ title, tasks, moveTask, updateTask, deleteTask 
               moveTask={moveTask}
               updateTask={updateTask}
               deleteTask={deleteTask}
+              addNotification={addNotification}
             />
           ))}
         </SortableContext>

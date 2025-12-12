@@ -40,3 +40,42 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Task Card Image Styles */
+.task-image-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.task-image-remove-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent black */
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  opacity: 0; /* Hidden by default */
+  transition: opacity 0.2s ease-in-out;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.task-image-container:hover .task-image-remove-btn {
+  opacity: 1; /* Show on hover */
+}
+
+.task-image-remove-btn:hover {
+  background-color: rgba(255, 0, 0, 0.7); /* Red on hover */
+}
+
+/* Image Preview Styles */
+.image-preview-overlay {
+  cursor: zoom-out; /* Indicate click to close */
+}
