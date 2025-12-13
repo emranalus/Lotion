@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
+import { Plus, LogOut } from "lucide-react";
 import {
     DndContext,
     DragOverlay,
@@ -10,16 +11,18 @@ import {
     type DragStartEvent,
     type DragEndEvent,
 } from "@dnd-kit/core";
-// import { sortableKeyboardCoordinates } from "@dnd-kit/sortable"; // Moved down combined with arrayMove
+import { sortableKeyboardCoordinates, arrayMove } from "@dnd-kit/sortable";
 import type { Task, Notification, Project } from "../types";
 import Sidebar from "./Sidebar";
 import Column from "./Column";
 import ToastContainer from "./ToastContainer";
 import ConfirmationModal from "./ConfirmationModal";
+import CreateTaskModal from "./CreateTaskModal";
 import type { User } from "firebase/auth";
 import {
     getFirestore,
     collection,
+    getDocs,
     addDoc,
     updateDoc,
     deleteDoc,
@@ -29,13 +32,9 @@ import {
     writeBatch,
     orderBy,
 } from "firebase/firestore";
-import { sortableKeyboardCoordinates, arrayMove } from "@dnd-kit/sortable";
 
 // ============================================================================
-// MAIN APP COMPONENT (Lazy-loaded after authentication)
-// ============================================================================
-// Contains all task management features with Firebase Firestore and dnd-kit
-// This component is code-split to reduce initial bundle size
+// MAIN APP COMPONENT
 // ============================================================================
 
 interface MainAppProps {
@@ -48,10 +47,18 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
     // STATE MANAGEMENT
     // ----------------------------------------------------------------------------
 
-    // Task management state
+    // Data state
     const [tasks, setTasks] = useState<Task[]>([]);
-    const [newTaskTitle, setNewTaskTitle] = useState("");
-    const [activeColumn, setActiveColumn] = useState<Task["column"]>("Not Started");
+    const [projects, setProjects] = useState<Project[]>([]);
+    const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+
+    // UI State
+    const [notifications, setNotifications] = useState<Notification[]>([]); // activeColumn removed
+
+    // Modals & Overlays
+    const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
 
     // Drag and drop state
     const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -59,41 +66,14 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
     // Column definitions
     const columns: Task["column"][] = ["Not Started", "In Progress", "Done"];
 
-    // Firestore database instance
+    // Firestore
     const db = getFirestore();
 
-    // Notification state definition
-    const [notifications, setNotifications] = useState<Notification[]>([]);
-
-    // Delete confirmation state
-    const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
-    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-
-    /**
-     * Add a global notification
-     */
-    const addNotification = (message: string, type: Notification["type"] = "info") => {
-        const id = Date.now().toString();
-        setNotifications((prev) => [...prev, { id, message, type }]);
-
-        // Auto remove after 3 seconds
-        setTimeout(() => {
-            setNotifications((prev) => prev.filter((n) => n.id !== id));
-        }, 3000);
-    };
-
-    /**
-     * Remove a notification manually
-     */
-    const removeNotification = (id: string) => {
-        setNotifications((prev) => prev.filter((n) => n.id !== id));
-    };
-
-    // Drag and drop sensors configuration
+    // Sensors
     const sensors = useSensors(
         useSensor(PointerSensor, {
             activationConstraint: {
-                distance: 5, // Requires 5px movement to start drag (prevents accidental drags on click)
+                distance: 5,
             },
         }),
         useSensor(KeyboardSensor, {
@@ -101,29 +81,24 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
         })
     );
 
-    // State for projects
-    const [projects, setProjects] = useState<Project[]>([]);
-    const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-
     // ----------------------------------------------------------------------------
-    // SIDE EFFECTS
+    // EFFECTS
     // ----------------------------------------------------------------------------
 
-    /**
-     * Listen for projects
-     */
+    // Listen for projects
     useEffect(() => {
         const projectsRef = collection(db, "users", user.uid, "projects");
-        const q = query(projectsRef, orderBy("createdAt"));
+        const q = query(projectsRef, orderBy("order", "asc"));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const projectsData: Project[] = [];
             snapshot.forEach((doc) => {
                 projectsData.push({ id: doc.id, ...doc.data() } as Project);
             });
+            // Fallback sort
+            projectsData.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
             setProjects(projectsData);
 
-            // Auto-select first project if none selected
             if (projectsData.length > 0 && !activeProjectId) {
                 setActiveProjectId(projectsData[0].id);
             }
@@ -132,18 +107,13 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
         return unsubscribe;
     }, [user, db, activeProjectId]);
 
-    /**
-     * Real-time Firestore listener for tasks
-     * Syncs tasks from Firestore database
-     * Tasks are now nested under projects in the collection path
-     */
+    // Listen for tasks
     useEffect(() => {
         if (!activeProjectId) {
             setTasks([]);
             return;
         }
 
-        // Tasks are now nested: users/{userId}/projects/{projectId}/tasks
         const tasksRef = collection(db, "users", user.uid, "projects", activeProjectId, "tasks");
         const q = query(tasksRef, orderBy("order"));
 
@@ -159,70 +129,126 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
     }, [user, db, activeProjectId]);
 
     // ----------------------------------------------------------------------------
-    // TASK CRUD OPERATIONS
+    // NOTIFICATIONS
     // ----------------------------------------------------------------------------
 
-    /**
-     * Add a new task to Firestore
-     * Creates a task in the currently selected column
-     */
-    /**
-     * Add a new project
-     */
+    const addNotification = (message: string, type: Notification["type"] = "info") => {
+        const id = Date.now().toString();
+        setNotifications((prev) => [...prev, { id, message, type }]);
+        setTimeout(() => {
+            setNotifications((prev) => prev.filter((n) => n.id !== id));
+        }, 3000);
+    };
+
+    const removeNotification = (id: string) => {
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
+    };
+
+    // ----------------------------------------------------------------------------
+    // PROJECT OPERATIONS
+    // ----------------------------------------------------------------------------
+
     const addProject = async (name: string) => {
         try {
             const projectsRef = collection(db, "users", user.uid, "projects");
+            const maxOrder = Math.max(...projects.map(p => p.order || 0), 0);
+            const newOrder = maxOrder + 100;
+
             const docRef = await addDoc(projectsRef, {
                 name,
-                createdAt: new Date()
+                createdAt: new Date(),
+                order: newOrder
             });
             setActiveProjectId(docRef.id);
             addNotification("Project created", "success");
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } catch (error: any) {
-            console.error("Error adding project:", error);
-            addNotification(`Failed to create project: ${error.message}`, "error");
+        } catch (error) {
+            const err = error as Error;
+            console.error("Error adding project:", err);
+            addNotification(`Failed to create project: ${err.message}`, "error");
         }
     };
 
-    /**
-     * Add a new task to Firestore
-     * Creates a task in the currently selected column
-     */
-    const addTask = async () => {
-        const title = newTaskTitle.trim();
-        if (!title) return;
+    const renameProject = async (projectId: string, newName: string) => {
+        try {
+            const projectRef = doc(db, "users", user.uid, "projects", projectId);
+            await updateDoc(projectRef, { name: newName });
+        } catch (error) {
+            console.error("Error renaming project:", error);
+            addNotification("Failed to rename project", "error");
+        }
+    };
+
+    const deleteProject = async (projectId: string) => {
+        try {
+            const tasksRef = collection(db, "users", user.uid, "projects", projectId, "tasks");
+            const snapshot = await getDocs(tasksRef);
+            const batch = writeBatch(db);
+
+            snapshot.docs.forEach((doc) => {
+                batch.delete(doc.ref);
+            });
+
+            const projectRef = doc(db, "users", user.uid, "projects", projectId);
+            batch.delete(projectRef);
+
+            await batch.commit();
+            addNotification("Project deleted", "success");
+
+            if (activeProjectId === projectId) {
+                const remaining = projects.filter(p => p.id !== projectId);
+                setActiveProjectId(remaining.length > 0 ? remaining[0].id : null);
+            }
+        } catch (error) {
+            console.error("Error deleting project:", error);
+            addNotification("Failed to delete project", "error");
+        }
+    };
+
+    const reorderProjects = async (newProjects: Project[]) => {
+        setProjects(newProjects);
+        try {
+            const batch = writeBatch(db);
+            newProjects.forEach((project, index) => {
+                const ref = doc(db, "users", user.uid, "projects", project.id);
+                const newOrder = index * 100 + 100;
+                batch.update(ref, { order: newOrder });
+            });
+            await batch.commit();
+        } catch (error) {
+            console.error("Error reordering projects:", error);
+        }
+    };
+
+    // ----------------------------------------------------------------------------
+    // TASK OPERATIONS
+    // ----------------------------------------------------------------------------
+
+    const addTask = async (title: string, imageUrl?: string) => {
         if (!activeProjectId) {
             addNotification("Please select a project first", "error");
             return;
         }
 
         try {
-            // Tasks are nested under projects
             const tasksRef = collection(db, "users", user.uid, "projects", activeProjectId, "tasks");
-
-            // Calculate new order (max + 100)
-            const columnTasks = tasks.filter(t => t.column === activeColumn);
+            const targetColumn = "Not Started";
+            const columnTasks = tasks.filter(t => t.column === targetColumn);
             const maxOrder = Math.max(...columnTasks.map(t => t.order || 0), 0);
             const newOrder = maxOrder + 100;
 
             await addDoc(tasksRef, {
                 title,
-                column: activeColumn,
-                order: newOrder
+                column: targetColumn,
+                order: newOrder,
+                imageUrl: imageUrl || ""
             });
-            setNewTaskTitle("");
+            addNotification("Task created", "success");
         } catch (error) {
             console.error("Error adding task:", error);
-            alert("Failed to add task. Please try again.");
+            addNotification("Failed to add task", "error");
         }
     };
 
-    /**
-     * Move a task to a different column
-     * @param taskId - The ID of the task to move
-     * @param targetColumn - The column to move the task to
-     */
     const moveTask = async (taskId: string, targetColumn: Task["column"]) => {
         if (!activeProjectId) return;
         try {
@@ -233,39 +259,25 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
         }
     };
 
-    /**
-     * Update a task's fields
-     * @param taskId - The ID of the task to update
-     * @param data - The data to update (e.g. title, imageUrl)
-     */
     const updateTask = async (taskId: string, data: Partial<Task>) => {
         if (!activeProjectId) return;
         try {
             const taskRef = doc(db, "users", user.uid, "projects", activeProjectId, "tasks", taskId);
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { id, ...updateData } = data; // Remove id from update data if present
+            const { id, ...updateData } = data;
             await updateDoc(taskRef, updateData);
         } catch (error) {
             console.error("Error updating task:", error);
         }
     };
 
-    /**
-     * Delete a task from Firestore
-     * Initiates the confirmation process
-     * @param taskId - The ID of the task to delete
-     */
     const deleteTask = (taskId: string) => {
         setTaskToDelete(taskId);
         setIsDeleteModalOpen(true);
     };
 
-    /**
-     * Confirm actual deletion
-     */
     const confirmDeleteTask = async () => {
         if (!taskToDelete || !activeProjectId) return;
-
         try {
             const taskRef = doc(db, "users", user.uid, "projects", activeProjectId, "tasks", taskToDelete);
             await deleteDoc(taskRef);
@@ -280,24 +292,15 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
     };
 
     // ----------------------------------------------------------------------------
-    // DRAG AND DROP HANDLERS
+    // DRAG HANDLERS
     // ----------------------------------------------------------------------------
 
-    /**
-     * Handle drag start event
-     * Stores the task being dragged for the DragOverlay
-     */
     const handleDragStart = (event: DragStartEvent) => {
         const { active } = event;
         const task = tasks.find((t) => t.id === active.id);
         setActiveTask(task || null);
     };
 
-    /**
-     * Handle drag end event
-     * Moves the task to the target column when dropped
-     * Note: Reordering within same column is not yet implemented in Firestore
-     */
     const handleDragEnd = async (event: DragEndEvent) => {
         const { active, over } = event;
         setActiveTask(null);
@@ -306,7 +309,6 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
         const activeTask = tasks.find((t) => t.id === active.id);
         if (!activeTask) return;
 
-        // 1. Determine Target Column
         let targetColumn: Task["column"] | undefined;
         if (over.data?.current?.type === "column") {
             targetColumn = over.data.current.column as Task["column"];
@@ -317,86 +319,56 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
 
         if (!targetColumn) return;
 
-        // 2. Prepare for Re-indexing
-        // Get all tasks for the target column, currently sorted by order
         const targetColumnTasks = tasks.filter((t) => t.column === targetColumn);
-        // Note: 'tasks' state is already sorted by order from useEffect.
-
-        // 3. Calculate New Order locally using arrayMove
         let newTasksInColumn: Task[];
 
         if (activeTask.column !== targetColumn) {
-            // -- Moving between columns --
-            // Remove from source (logically) and insert into target
-            // For simplicity, we just insert it at the specific index of 'over'
-
-            // Current IDs in target (without active)
             const targetIds = targetColumnTasks.map(t => t.id);
-
             let insertIndex: number;
             if (over.data?.current?.type === "column") {
-                insertIndex = targetIds.length; // End of list
+                insertIndex = targetIds.length;
             } else {
                 const overIndex = targetIds.indexOf(over.id as string);
-                // Heuristic: If we are dragging onto a task, put it there.
-                // dnd-kit usually implies insertion relative to over.
                 insertIndex = overIndex >= 0 ? overIndex : targetIds.length;
             }
-
-            // Create new temporary array for re-ordering
-            // We just need the list of items in their new desired sequence
             newTasksInColumn = [...targetColumnTasks];
             newTasksInColumn.splice(insertIndex, 0, { ...activeTask, column: targetColumn });
-
         } else {
-            // -- Same column reordering --
             const oldIndex = targetColumnTasks.findIndex((t) => t.id === active.id);
             let newIndex: number;
-
             if (over.data?.current?.type === "column") {
                 newIndex = targetColumnTasks.length - 1;
             } else {
                 newIndex = targetColumnTasks.findIndex((t) => t.id === over.id);
             }
-
-            if (oldIndex === newIndex) return; // No change
-
+            if (oldIndex === newIndex) return;
             newTasksInColumn = arrayMove(targetColumnTasks, oldIndex, newIndex);
         }
 
-        // 4. Optimistic UI Update
-        // Apply the new order and column to the local state immediately
         const newTasksWithOrder = newTasksInColumn.map((t, index) => ({
             ...t,
-            order: index * 100 + 100, // Same logic as batch update
+            order: index * 100 + 100,
             column: targetColumn // Ensure column is updated if moved
         }));
 
         setTasks((prevTasks) => {
-            // Keep tasks that are NOT in the target column
-            // And also exclude the active task from its original position (if it moved columns)
             const otherTasks = prevTasks.filter(t =>
                 t.column !== targetColumn && t.id !== active.id
             );
             return [...otherTasks, ...newTasksWithOrder];
         });
 
-        // 5. Batch Update Firestore
-        // Re-assign order to ALL items in this column based on new array index
         if (!activeProjectId) return;
         const batch = writeBatch(db);
-
-        // Also update the active task's column if it changed
         const activeRef = doc(db, "users", user.uid, "projects", activeProjectId, "tasks", active.id as string);
+
         if (activeTask.column !== targetColumn) {
             batch.update(activeRef, { column: targetColumn });
         }
 
         newTasksInColumn.forEach((task, index) => {
             const ref = doc(db, "users", user.uid, "projects", activeProjectId, "tasks", task.id);
-            const newOrder = index * 100 + 100; // Spaced out
-
-            // Only update if changed (optimization)
+            const newOrder = index * 100 + 100;
             if (task.order !== newOrder || task.id === active.id) {
                 batch.update(ref, { order: newOrder });
             }
@@ -407,7 +379,6 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
         } catch (error) {
             console.error("Error batch updating orders:", error);
             addNotification("Failed to save new order", "error");
-            // Optionally revert state here if needed, but snapshot listener usually corrects it
         }
     };
 
@@ -423,21 +394,20 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
             onDragEnd={handleDragEnd}
         >
             <div className="flex h-screen bg-neutral-900 text-neutral-100 overflow-hidden font-inter">
-                {/* Sidebar */}
                 <Sidebar
                     projects={projects}
                     activeProjectId={activeProjectId}
                     onSelectProject={setActiveProjectId}
                     onAddProject={addProject}
+                    onRenameProject={renameProject}
+                    onDeleteProject={deleteProject}
+                    onReorderProjects={reorderProjects}
                 />
 
-                {/* Main Content Area */}
                 <div className="flex-1 flex flex-col h-full overflow-hidden bg-neutral-900 relative">
-                    {/* Top Gradient Fade (optional depth) */}
                     <div className="absolute top-0 left-0 right-0 h-64 bg-gradient-to-b from-neutral-800/20 to-transparent pointer-events-none" />
 
                     <div className="app-container h-full flex flex-col z-10">
-                        {/* Header Area */}
                         <header className="px-8 py-6 shrink-0 flex items-center justify-between">
                             <div>
                                 <h2 className="text-2xl font-bold text-white tracking-tight">
@@ -446,52 +416,34 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
                                 <p className="text-sm text-neutral-500 mt-1">Manage your tasks and progress</p>
                             </div>
 
-                            <div className="flex items-center gap-4">
-                                <span className="text-xs font-medium text-neutral-500 bg-neutral-950/50 px-3 py-1.5 rounded-full border border-neutral-800">
-                                    {user.email}
-                                </span>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={() => setIsCreateTaskModalOpen(true)}
+                                    title="Create New Task"
+                                    className="h-9 w-9 flex items-center justify-center bg-neutral-900/50 border border-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-800 hover:border-neutral-700 rounded-lg transition-all duration-200 group"
+                                >
+                                    <Plus className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform" />
+                                </button>
+
+                                <div className="h-6 w-px bg-neutral-800/50 mx-1"></div>
+
+                                <div className="h-9 px-3.5 flex items-center gap-2 bg-neutral-900/50 border border-neutral-800 rounded-lg">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"></div>
+                                    <span className="text-xs font-medium text-neutral-400">
+                                        {user.email}
+                                    </span>
+                                </div>
+
                                 <button
                                     onClick={onSignOut}
-                                    className="text-xs font-medium text-neutral-400 hover:text-white transition-colors"
+                                    title="Sign Out"
+                                    className="h-9 w-9 flex items-center justify-center bg-neutral-900/50 border border-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-800 hover:border-neutral-700 rounded-lg transition-all duration-200 group/logout"
                                 >
-                                    Sign Out
+                                    <LogOut className="w-3.5 h-3.5 group-hover/logout:translate-x-0.5 transition-transform" />
                                 </button>
                             </div>
                         </header>
 
-                        {/* Task input area */}
-                        <div className="px-8 pb-6 shrink-0">
-                            <div className="flex gap-4 items-center bg-neutral-950/50 p-1.5 rounded-xl border border-neutral-800 focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/50 transition-all max-w-2xl shadow-sm">
-                                <select
-                                    value={activeColumn}
-                                    onChange={(e) => setActiveColumn(e.target.value as Task["column"])}
-                                    className="bg-transparent text-sm font-medium text-neutral-400 focus:outline-none px-3 py-2 cursor-pointer hover:text-white transition-colors"
-                                >
-                                    {columns.map((col) => (
-                                        <option key={col} value={col} className="bg-neutral-900 text-neutral-300">
-                                            {col}
-                                        </option>
-                                    ))}
-                                </select>
-                                <div className="w-px h-5 bg-neutral-800"></div>
-                                <input
-                                    type="text"
-                                    placeholder="Add a new task..."
-                                    value={newTaskTitle}
-                                    onChange={(e) => setNewTaskTitle(e.target.value)}
-                                    onKeyDown={(e) => e.key === "Enter" && addTask()}
-                                    className="flex-1 bg-transparent text-sm text-white placeholder-neutral-600 focus:outline-none px-2"
-                                />
-                                <button
-                                    onClick={addTask}
-                                    className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors shadow-lg shadow-indigo-900/20"
-                                >
-                                    Add Task
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Task columns */}
                         <div className="columns flex-grow overflow-x-auto overflow-y-hidden px-8 pb-6 custom-scrollbar">
                             <div className="flex gap-6 h-full min-w-max">
                                 {columns.map((col) => (
@@ -511,19 +463,25 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
                 </div>
             </div>
 
-            {/* Toast Container */}
             <ToastContainer notifications={notifications} removeNotification={removeNotification} />
 
-            {/* Confirmation Modal */}
             <ConfirmationModal
                 isOpen={isDeleteModalOpen}
                 title="Delete Task?"
-                message="Are you sure you want to delete this task? This cannot be undone."
+                message="Are you sure you want to delete this task? This action cannot be undone."
                 onConfirm={confirmDeleteTask}
-                onCancel={() => setIsDeleteModalOpen(false)}
+                onCancel={() => {
+                    setIsDeleteModalOpen(false);
+                    setTaskToDelete(null);
+                }}
             />
 
-            {/* Drag overlay - shows semi-transparent card following cursor */}
+            <CreateTaskModal
+                isOpen={isCreateTaskModalOpen}
+                onClose={() => setIsCreateTaskModalOpen(false)}
+                onCreate={addTask}
+            />
+
             <DragOverlay dropAnimation={{ duration: 0 }}>
                 {activeTask ? (
                     <div className="bg-neutral-800 border border-neutral-700/50 rounded-xl p-3 shadow-2xl opacity-80 cursor-grabbing rotate-2 scale-105">
