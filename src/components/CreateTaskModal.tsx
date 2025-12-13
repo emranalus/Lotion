@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { X, Image, Upload, Loader2 } from "lucide-react";
+import { X, Image, Loader2 } from "lucide-react";
 import { createPortal } from "react-dom";
 
 interface CreateTaskModalProps {
