@@ -4,14 +4,13 @@ import {
     DndContext,
     DragOverlay,
     PointerSensor,
-    KeyboardSensor,
     useSensor,
     useSensors,
     closestCenter,
     type DragStartEvent,
     type DragEndEvent,
 } from "@dnd-kit/core";
-import { sortableKeyboardCoordinates, arrayMove } from "@dnd-kit/sortable";
+import { arrayMove } from "@dnd-kit/sortable";
 import type { Task, Notification, Project } from "../types";
 import Sidebar from "./Sidebar";
 import Column from "./Column";
@@ -69,15 +68,12 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
     // Firestore
     const db = getFirestore();
 
-    // Sensors
+    // Sensors (keyboard sensor removed to prevent conflicts with modal inputs)
     const sensors = useSensors(
         useSensor(PointerSensor, {
             activationConstraint: {
                 distance: 5,
             },
-        }),
-        useSensor(KeyboardSensor, {
-            coordinateGetter: sortableKeyboardCoordinates,
         })
     );
 

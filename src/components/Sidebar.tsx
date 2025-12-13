@@ -4,7 +4,6 @@ import { Plus, Layout, FolderKanban, CheckSquare, Search, Pencil, Trash2, GripVe
 import {
     DndContext,
     closestCenter,
-    KeyboardSensor,
     PointerSensor,
     useSensor,
     useSensors,
@@ -13,7 +12,6 @@ import {
 import {
     arrayMove,
     SortableContext,
-    sortableKeyboardCoordinates,
     verticalListSortingStrategy,
     useSortable,
 } from "@dnd-kit/sortable";
@@ -108,10 +106,9 @@ const Sidebar: React.FC<SidebarProps> = ({
     const [isRenaming, setIsRenaming] = useState<string | null>(null); // projectId being renamed
     const [renameValue, setRenameValue] = useState("");
 
-    // Sensors
+    // Sensors (keyboard sensor removed to prevent conflicts with rename inputs)
     const sensors = useSensors(
-        useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+        useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
     );
 
     // Close context menu on click outside

@@ -12,12 +12,19 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1280,
     height: 800,
+    backgroundColor: "#0a0a0a",
+    // Match app's dark background (neutral-950)
+    show: false,
+    // Don't show until ready to prevent white flash
     icon: path.join(process.env.VITE_PUBLIC, "electron-vite.svg"),
     webPreferences: {
       preload: path.join(__dirname$1, "preload.js")
     }
   });
   Menu.setApplicationMenu(null);
+  win.once("ready-to-show", () => {
+    win?.show();
+  });
   win.webContents.on("did-finish-load", () => {
     win?.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
   });

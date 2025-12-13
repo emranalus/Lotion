@@ -77,7 +77,17 @@ function App() {
 
   // Show loading state while checking authentication
   if (loading) {
-    return <div className="loading">Loading...</div>;
+    return (
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="w-16 h-16 border-4 border-neutral-800 border-t-indigo-600 rounded-full animate-spin"></div>
+            <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-indigo-400 rounded-full animate-spin" style={{ animationDuration: '1.5s', animationDirection: 'reverse' }}></div>
+          </div>
+          <p className="text-neutral-500 text-sm font-medium animate-pulse">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   // Show login page if user is not authenticated
@@ -87,7 +97,17 @@ function App() {
 
   // Main application UI (lazy-loaded)
   return (
-    <Suspense fallback={<div className="loading">Loading app...</div>}>
+    <Suspense fallback={
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="w-16 h-16 border-4 border-neutral-800 border-t-indigo-600 rounded-full animate-spin"></div>
+            <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-indigo-400 rounded-full animate-spin" style={{ animationDuration: '1.5s', animationDirection: 'reverse' }}></div>
+          </div>
+          <p className="text-neutral-500 text-sm font-medium animate-pulse">Loading app...</p>
+        </div>
+      </div>
+    }>
       <MainApp user={user} onSignOut={handleSignOut} />
     </Suspense>
   );
