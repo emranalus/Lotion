@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, Menu } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 const __dirname$1 = path.dirname(fileURLToPath(import.meta.url));
@@ -17,6 +17,7 @@ function createWindow() {
       preload: path.join(__dirname$1, "preload.js")
     }
   });
+  Menu.setApplicationMenu(null);
   win.webContents.on("did-finish-load", () => {
     win?.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
   });

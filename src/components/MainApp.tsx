@@ -27,7 +27,6 @@ import {
     onSnapshot,
     query,
     writeBatch,
-    where,
     orderBy,
 } from "firebase/firestore";
 import { sortableKeyboardCoordinates, arrayMove } from "@dnd-kit/sortable";
@@ -136,7 +135,7 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
     /**
      * Real-time Firestore listener for tasks
      * Syncs tasks from Firestore database
-     * Tasks are ordered alphabetically by title
+     * Tasks are now nested under projects in the collection path
      */
     useEffect(() => {
         if (!activeProjectId) {
@@ -144,20 +143,14 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
             return;
         }
 
-        const tasksRef = collection(db, "users", user.uid, "tasks");
-        // Filter by projectId
-        const q = query(tasksRef, where("projectId", "==", activeProjectId));
+        // Tasks are now nested: users/{userId}/projects/{projectId}/tasks
+        const tasksRef = collection(db, "users", user.uid, "projects", activeProjectId, "tasks");
+        const q = query(tasksRef, orderBy("order"));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const tasksData: Task[] = [];
             snapshot.forEach((doc) => {
                 tasksData.push({ id: doc.id, ...doc.data() } as Task);
-            });
-            // Sort tasks by order explicitly
-            tasksData.sort((a, b) => {
-                const orderA = a.order ?? 0;
-                const orderB = b.order ?? 0;
-                return orderA - orderB;
             });
             setTasks(tasksData);
         });
@@ -205,7 +198,8 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
         }
 
         try {
-            const tasksRef = collection(db, "users", user.uid, "tasks");
+            // Tasks are nested under projects
+            const tasksRef = collection(db, "users", user.uid, "projects", activeProjectId, "tasks");
 
             // Calculate new order (max + 100)
             const columnTasks = tasks.filter(t => t.column === activeColumn);
@@ -215,8 +209,7 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
             await addDoc(tasksRef, {
                 title,
                 column: activeColumn,
-                order: newOrder,
-                projectId: activeProjectId
+                order: newOrder
             });
             setNewTaskTitle("");
         } catch (error) {
@@ -231,8 +224,9 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
      * @param targetColumn - The column to move the task to
      */
     const moveTask = async (taskId: string, targetColumn: Task["column"]) => {
+        if (!activeProjectId) return;
         try {
-            const taskRef = doc(db, "users", user.uid, "tasks", taskId);
+            const taskRef = doc(db, "users", user.uid, "projects", activeProjectId, "tasks", taskId);
             await updateDoc(taskRef, { column: targetColumn });
         } catch (error) {
             console.error("Error moving task:", error);
@@ -245,8 +239,9 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
      * @param data - The data to update (e.g. title, imageUrl)
      */
     const updateTask = async (taskId: string, data: Partial<Task>) => {
+        if (!activeProjectId) return;
         try {
-            const taskRef = doc(db, "users", user.uid, "tasks", taskId);
+            const taskRef = doc(db, "users", user.uid, "projects", activeProjectId, "tasks", taskId);
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
             const { id, ...updateData } = data; // Remove id from update data if present
             await updateDoc(taskRef, updateData);
@@ -269,10 +264,10 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
      * Confirm actual deletion
      */
     const confirmDeleteTask = async () => {
-        if (!taskToDelete) return;
+        if (!taskToDelete || !activeProjectId) return;
 
         try {
-            const taskRef = doc(db, "users", user.uid, "tasks", taskToDelete);
+            const taskRef = doc(db, "users", user.uid, "projects", activeProjectId, "tasks", taskToDelete);
             await deleteDoc(taskRef);
             addNotification("Task deleted successfully", "success");
         } catch (error) {
@@ -388,16 +383,17 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
 
         // 5. Batch Update Firestore
         // Re-assign order to ALL items in this column based on new array index
+        if (!activeProjectId) return;
         const batch = writeBatch(db);
 
         // Also update the active task's column if it changed
-        const activeRef = doc(db, "users", user.uid, "tasks", active.id as string);
+        const activeRef = doc(db, "users", user.uid, "projects", activeProjectId, "tasks", active.id as string);
         if (activeTask.column !== targetColumn) {
             batch.update(activeRef, { column: targetColumn });
         }
 
         newTasksInColumn.forEach((task, index) => {
-            const ref = doc(db, "users", user.uid, "tasks", task.id);
+            const ref = doc(db, "users", user.uid, "projects", activeProjectId, "tasks", task.id);
             const newOrder = index * 100 + 100; // Spaced out
 
             // Only update if changed (optimization)

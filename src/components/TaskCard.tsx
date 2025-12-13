@@ -169,7 +169,8 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, updateTask, deleteTask, addNo
       ref={setNodeRef}
       style={style}
       {...attributes}
-      className="group relative bg-neutral-900 border border-neutral-800 rounded-xl p-3 shadow-sm hover:shadow-md hover:border-neutral-700 hover:bg-neutral-800/50 transition-all duration-200"
+      {...listeners}
+      className="group relative bg-neutral-900 border border-neutral-800 rounded-xl p-3 shadow-sm hover:shadow-md hover:border-neutral-700 hover:bg-neutral-800/50 transition-all duration-200 cursor-grab active:cursor-grabbing"
     >
       {/* Task Image */}
       {task.imageUrl && !isDragging && (
@@ -199,7 +200,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, updateTask, deleteTask, addNo
 
       {/* Edit mode: Show input field */}
       {isEditing ? (
-        <div className="relative">
+        <div className="relative pointer-events-auto" onPointerDown={(e) => e.stopPropagation()}>
           <textarea
             // @ts-ignore
             ref={inputRef}
@@ -217,13 +218,15 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, updateTask, deleteTask, addNo
         <div className="flex flex-col gap-2">
           <p
             className="text-sm font-medium text-neutral-200 leading-snug break-words"
-            {...listeners}
           >
             {task.title}
           </p>
 
           {/* Action buttons (hidden until hover) */}
-          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pt-2 border-t border-neutral-800/50 mt-1">
+          <div
+            className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pt-2 border-t border-neutral-800/50 mt-1"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
             <button
               onClick={() => fileInputRef.current?.click()}
               className="p-1.5 text-neutral-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded transition-colors"

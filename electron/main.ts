@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Menu } from 'electron'
 
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -35,6 +35,9 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js'),
         },
     })
+
+    // Remove the default menu bar
+    Menu.setApplicationMenu(null)
 
     // Test active push message to Renderer-process.
     win.webContents.on('did-finish-load', () => {

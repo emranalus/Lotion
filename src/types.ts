@@ -4,7 +4,6 @@ export type Task = {
   column: "Not Started" | "In Progress" | "Done";
   imageUrl?: string;
   order: number;
-  projectId?: string;
 };
 
 export type Project = {
