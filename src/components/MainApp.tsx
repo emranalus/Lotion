@@ -11,7 +11,8 @@ import {
     type DragEndEvent,
 } from "@dnd-kit/core";
 // import { sortableKeyboardCoordinates } from "@dnd-kit/sortable"; // Moved down combined with arrayMove
-import type { Task, Notification } from "../types";
+import type { Task, Notification, Project } from "../types";
+import Sidebar from "./Sidebar";
 import Column from "./Column";
 import ToastContainer from "./ToastContainer";
 import ConfirmationModal from "./ConfirmationModal";
@@ -25,7 +26,9 @@ import {
     doc,
     onSnapshot,
     query,
-    writeBatch
+    writeBatch,
+    where,
+    orderBy,
 } from "firebase/firestore";
 import { sortableKeyboardCoordinates, arrayMove } from "@dnd-kit/sortable";
 
@@ -99,9 +102,36 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
         })
     );
 
+    // State for projects
+    const [projects, setProjects] = useState<Project[]>([]);
+    const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+
     // ----------------------------------------------------------------------------
     // SIDE EFFECTS
     // ----------------------------------------------------------------------------
+
+    /**
+     * Listen for projects
+     */
+    useEffect(() => {
+        const projectsRef = collection(db, "users", user.uid, "projects");
+        const q = query(projectsRef, orderBy("createdAt"));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const projectsData: Project[] = [];
+            snapshot.forEach((doc) => {
+                projectsData.push({ id: doc.id, ...doc.data() } as Project);
+            });
+            setProjects(projectsData);
+
+            // Auto-select first project if none selected
+            if (projectsData.length > 0 && !activeProjectId) {
+                setActiveProjectId(projectsData[0].id);
+            }
+        });
+
+        return unsubscribe;
+    }, [user, db, activeProjectId]);
 
     /**
      * Real-time Firestore listener for tasks
@@ -109,8 +139,14 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
      * Tasks are ordered alphabetically by title
      */
     useEffect(() => {
+        if (!activeProjectId) {
+            setTasks([]);
+            return;
+        }
+
         const tasksRef = collection(db, "users", user.uid, "tasks");
-        const q = query(tasksRef);
+        // Filter by projectId
+        const q = query(tasksRef, where("projectId", "==", activeProjectId));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const tasksData: Task[] = [];
@@ -127,7 +163,7 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
         });
 
         return unsubscribe;
-    }, [user, db]);
+    }, [user, db, activeProjectId]);
 
     // ----------------------------------------------------------------------------
     // TASK CRUD OPERATIONS
@@ -137,9 +173,36 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
      * Add a new task to Firestore
      * Creates a task in the currently selected column
      */
+    /**
+     * Add a new project
+     */
+    const addProject = async (name: string) => {
+        try {
+            const projectsRef = collection(db, "users", user.uid, "projects");
+            const docRef = await addDoc(projectsRef, {
+                name,
+                createdAt: new Date()
+            });
+            setActiveProjectId(docRef.id);
+            addNotification("Project created", "success");
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } catch (error: any) {
+            console.error("Error adding project:", error);
+            addNotification(`Failed to create project: ${error.message}`, "error");
+        }
+    };
+
+    /**
+     * Add a new task to Firestore
+     * Creates a task in the currently selected column
+     */
     const addTask = async () => {
         const title = newTaskTitle.trim();
         if (!title) return;
+        if (!activeProjectId) {
+            addNotification("Please select a project first", "error");
+            return;
+        }
 
         try {
             const tasksRef = collection(db, "users", user.uid, "tasks");
@@ -152,7 +215,8 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
             await addDoc(tasksRef, {
                 title,
                 column: activeColumn,
-                order: newOrder
+                order: newOrder,
+                projectId: activeProjectId
             });
             setNewTaskTitle("");
         } catch (error) {
@@ -362,53 +426,92 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
         >
-            <div className="app-container">
-                {/* Navigation bar with user info and sign out */}
-                <header className="navbar">
-                    <h1>Lotion</h1>
-                    <div className="user-info">
-                        <span className="user-email">{user.email}</span>
-                        <button onClick={onSignOut} className="signout-btn">
-                            Sign Out
-                        </button>
+            <div className="flex h-screen bg-neutral-900 text-neutral-100 overflow-hidden font-inter">
+                {/* Sidebar */}
+                <Sidebar
+                    projects={projects}
+                    activeProjectId={activeProjectId}
+                    onSelectProject={setActiveProjectId}
+                    onAddProject={addProject}
+                />
+
+                {/* Main Content Area */}
+                <div className="flex-1 flex flex-col h-full overflow-hidden bg-neutral-900 relative">
+                    {/* Top Gradient Fade (optional depth) */}
+                    <div className="absolute top-0 left-0 right-0 h-64 bg-gradient-to-b from-neutral-800/20 to-transparent pointer-events-none" />
+
+                    <div className="app-container h-full flex flex-col z-10">
+                        {/* Header Area */}
+                        <header className="px-8 py-6 shrink-0 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-2xl font-bold text-white tracking-tight">
+                                    {projects.find(p => p.id === activeProjectId)?.name || "Dashboard"}
+                                </h2>
+                                <p className="text-sm text-neutral-500 mt-1">Manage your tasks and progress</p>
+                            </div>
+
+                            <div className="flex items-center gap-4">
+                                <span className="text-xs font-medium text-neutral-500 bg-neutral-950/50 px-3 py-1.5 rounded-full border border-neutral-800">
+                                    {user.email}
+                                </span>
+                                <button
+                                    onClick={onSignOut}
+                                    className="text-xs font-medium text-neutral-400 hover:text-white transition-colors"
+                                >
+                                    Sign Out
+                                </button>
+                            </div>
+                        </header>
+
+                        {/* Task input area */}
+                        <div className="px-8 pb-6 shrink-0">
+                            <div className="flex gap-4 items-center bg-neutral-950/50 p-1.5 rounded-xl border border-neutral-800 focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/50 transition-all max-w-2xl shadow-sm">
+                                <select
+                                    value={activeColumn}
+                                    onChange={(e) => setActiveColumn(e.target.value as Task["column"])}
+                                    className="bg-transparent text-sm font-medium text-neutral-400 focus:outline-none px-3 py-2 cursor-pointer hover:text-white transition-colors"
+                                >
+                                    {columns.map((col) => (
+                                        <option key={col} value={col} className="bg-neutral-900 text-neutral-300">
+                                            {col}
+                                        </option>
+                                    ))}
+                                </select>
+                                <div className="w-px h-5 bg-neutral-800"></div>
+                                <input
+                                    type="text"
+                                    placeholder="Add a new task..."
+                                    value={newTaskTitle}
+                                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                                    onKeyDown={(e) => e.key === "Enter" && addTask()}
+                                    className="flex-1 bg-transparent text-sm text-white placeholder-neutral-600 focus:outline-none px-2"
+                                />
+                                <button
+                                    onClick={addTask}
+                                    className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors shadow-lg shadow-indigo-900/20"
+                                >
+                                    Add Task
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Task columns */}
+                        <div className="columns flex-grow overflow-x-auto overflow-y-hidden px-8 pb-6 custom-scrollbar">
+                            <div className="flex gap-6 h-full min-w-max">
+                                {columns.map((col) => (
+                                    <Column
+                                        key={col}
+                                        title={col}
+                                        tasks={tasks.filter((t) => t.column === col)}
+                                        moveTask={moveTask}
+                                        updateTask={updateTask}
+                                        deleteTask={deleteTask}
+                                        addNotification={addNotification}
+                                    />
+                                ))}
+                            </div>
+                        </div>
                     </div>
-                </header>
-
-                {/* Task input form */}
-                <div className="task-input">
-                    <select
-                        value={activeColumn}
-                        onChange={(e) => setActiveColumn(e.target.value as Task["column"])}
-                    >
-                        {columns.map((col) => (
-                            <option key={col} value={col}>
-                                {col}
-                            </option>
-                        ))}
-                    </select>
-                    <input
-                        type="text"
-                        placeholder="New task title..."
-                        value={newTaskTitle}
-                        onChange={(e) => setNewTaskTitle(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && addTask()}
-                    />
-                    <button onClick={addTask}>Add Task</button>
-                </div>
-
-                {/* Task columns */}
-                <div className="columns">
-                    {columns.map((col) => (
-                        <Column
-                            key={col}
-                            title={col}
-                            tasks={tasks.filter((t) => t.column === col)}
-                            moveTask={moveTask}
-                            updateTask={updateTask}
-                            deleteTask={deleteTask}
-                            addNotification={addNotification}
-                        />
-                    ))}
                 </div>
             </div>
 
@@ -427,8 +530,8 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
             {/* Drag overlay - shows semi-transparent card following cursor */}
             <DragOverlay dropAnimation={{ duration: 0 }}>
                 {activeTask ? (
-                    <div className="task-card" style={{ opacity: 0.5 }}>
-                        <span className="task-title">{activeTask.title}</span>
+                    <div className="bg-neutral-800 border border-neutral-700/50 rounded-xl p-3 shadow-2xl opacity-80 cursor-grabbing rotate-2 scale-105">
+                        <p className="text-sm font-medium text-neutral-200 leading-snug">{activeTask.title}</p>
                     </div>
                 ) : null}
             </DragOverlay>

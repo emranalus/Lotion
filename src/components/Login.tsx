@@ -1,12 +1,9 @@
 import React, { useState } from "react";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { CheckSquare, AlertTriangle } from "lucide-react";
 
 // ============================================================================
 // LOGIN COMPONENT  
-// ============================================================================
-// Handles user authentication with Firebase Auth.
-// Supports both sign up (create new account) and sign in (existing account).
-// Displays error messages for failed authentication attempts.
 // ============================================================================
 
 interface LoginProps {
@@ -24,7 +21,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
     /**
      * Handle form submission for sign in or sign up
-     * @param e - Form submit event
      */
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -32,100 +28,111 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
         try {
             if (isSignUp) {
-                // Create new user account
                 await createUserWithEmailAndPassword(auth, email, password);
             } else {
-                // Sign in existing user
                 await signInWithEmailAndPassword(auth, email, password);
             }
             onLogin();
-        } catch (err: any) {
-            // Parse Firebase errors into user-friendly messages
-            const errorCode = err.code;
-            const EMAIL_OR_PASSWORD_IS_INCORRECT = 'Email or password is incorrect. Please try again.';
+        } catch (err) {
+            let message = 'Authentication failed.';
+            let code = 'unknown';
 
-            switch (errorCode) {
+            if (err instanceof Error) {
+                // @ts-expect-error - Firebase errors often have a code property
+                code = err.code || 'unknown';
+                message = err.message;
+            }
+
+            const EMAIL_OR_PASSWORD_IS_INCORRECT = 'Email or password is incorrect.';
+
+            switch (code) {
                 case 'auth/email-already-in-use':
-                    setError('This email is already registered. Please sign in instead.');
+                    setError('This email is already registered.');
                     break;
                 case 'auth/weak-password':
-                    setError('Password should be at least 6 characters long.');
+                    setError('Password should be at least 6 characters.');
                     break;
                 case 'auth/user-not-found':
-                    setError(EMAIL_OR_PASSWORD_IS_INCORRECT);
-                    break;
                 case 'auth/wrong-password':
                     setError(EMAIL_OR_PASSWORD_IS_INCORRECT);
                     break;
                 case 'auth/invalid-email':
                     setError('Please enter a valid email address.');
                     break;
-                case 'auth/too-many-requests':
-                    setError('Too many failed attempts. Please try again later.');
-                    break;
                 default:
-                    setError(err.message || 'Authentication failed. Please try again.');
+                    setError(message);
             }
         }
     };
 
     return (
-        <div className="login-container">
-            <div className="login-card">
-                <h1>Lotion</h1>
-                <h2>{isSignUp ? "Create Account" : "Sign In"}</h2>
+        <div className="min-h-screen flex items-center justify-center bg-neutral-950 p-4">
+            <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-2xl p-8 shadow-2xl">
+                <div className="flex flex-col items-center mb-8">
+                    <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-900/40 mb-4">
+                        <CheckSquare className="w-7 h-7 text-white" />
+                    </div>
+                    <h1 className="text-2xl font-bold text-white tracking-tight">Welcome to Lotion</h1>
+                    <p className="text-neutral-500 mt-2 text-sm">
+                        {isSignUp ? "Create an account to get started" : "Sign in to continue to your workspace"}
+                    </p>
+                </div>
 
-                <form onSubmit={handleSubmit}>
-                    {/* Email field */}
-                    <div className="form-group">
-                        <label htmlFor="email">Email</label>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-neutral-400 uppercase tracking-wider" htmlFor="email">Email</label>
                         <input
                             id="email"
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder="guest@example.com"
+                            placeholder="name@example.com"
                             required
+                            className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-4 py-3 text-white placeholder-neutral-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-medium"
                         />
                     </div>
 
-                    {/* Password field */}
-                    <div className="form-group">
-                        <label htmlFor="password">Password</label>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-neutral-400 uppercase tracking-wider" htmlFor="password">Password</label>
                         <input
                             id="password"
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            placeholder="123456"
+                            placeholder="••••••••"
                             required
                             minLength={6}
+                            className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-4 py-3 text-white placeholder-neutral-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-medium"
                         />
                     </div>
 
-                    {/* Error message display */}
-                    {error && <div className="error-message">{error}</div>}
+                    {error && (
+                        <div className="bg-red-950/50 border border-red-900/50 text-red-200 text-sm px-4 py-3 rounded-lg flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4 shrink-0" />
+                            {error}
+                        </div>
+                    )}
 
-                    {/* Submit button */}
-                    <button type="submit" className="submit-btn">
-                        {isSignUp ? "Sign Up" : "Sign In"}
+                    <button
+                        type="submit"
+                        className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg shadow-lg shadow-indigo-900/20 hover:shadow-indigo-900/40 transition-all transform active:scale-[0.98] mt-2"
+                    >
+                        {isSignUp ? "Create Account" : "Sign In"}
                     </button>
                 </form>
 
-                {/* Toggle between sign in and sign up */}
-                <p className="toggle-mode">
-                    {isSignUp ? "Already have an account? " : "Don't have an account? "}
+                <div className="mt-6 text-center">
                     <button
                         type="button"
-                        className="toggle-btn"
+                        className="text-sm text-neutral-500 hover:text-indigo-400 transition-colors font-medium"
                         onClick={() => {
                             setIsSignUp(!isSignUp);
                             setError("");
                         }}
                     >
-                        {isSignUp ? "Sign In" : "Sign Up"}
+                        {isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up"}
                     </button>
-                </p>
+                </div>
             </div>
         </div>
     );

@@ -4,6 +4,14 @@ export type Task = {
   column: "Not Started" | "In Progress" | "Done";
   imageUrl?: string;
   order: number;
+  projectId?: string;
+};
+
+export type Project = {
+  id: string;
+  name: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  createdAt?: any; // Firestore Timestamp
 };
 
 export type Notification = {

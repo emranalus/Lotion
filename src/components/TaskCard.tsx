@@ -2,14 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useSortable } from "@dnd-kit/sortable";
 import type { Task } from "../types";
-
-// ============================================================================
-// TASK CARD COMPONENT
-// ============================================================================
-// Displays an individual task card with inline editing and drag-and-drop
-// functionality. Users can edit task titles, delete tasks, or drag them
-// to different columns.
-// ============================================================================
+import { Edit2, Trash2, Image, X, ZoomIn } from "lucide-react";
 
 interface TaskCardProps {
   task: Task;
@@ -40,7 +33,8 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, updateTask, deleteTask, addNo
 
   // Apply semi-transparency while dragging
   const style = {
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0.3 : 1,
+    // transform is handled by dnd-kit context usually, but we need to ensure it's not conflicting
   };
 
   /**
@@ -82,8 +76,6 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, updateTask, deleteTask, addNo
 
   /**
    * Handle keyboard shortcuts while editing
-   * - Enter: Save changes
-   * - Escape: Cancel editing
    */
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
@@ -115,15 +107,10 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, updateTask, deleteTask, addNo
   };
 
   /**
-   * Render Image Preview Portal
-   */
-  /**
    * Handle Image Removal
    */
   const handleRemoveImage = (e: React.MouseEvent) => {
     e.stopPropagation();
-    // User requested "wholesome" experience (no alerts), so just delete.
-    // If we wanted safety without alerts, we could use a two-step button or undo toast.
     updateTask(task.id, { imageUrl: "" });
   };
 
@@ -147,37 +134,27 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, updateTask, deleteTask, addNo
 
     return createPortal(
       <div
-        className="image-preview-overlay"
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100vw",
-          height: "100vh",
-          backgroundColor: "rgba(0,0,0,0.8)",
-          zIndex: 9999,
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          flexDirection: "column",
-        }}
+        className="image-preview-overlay fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm"
         onClick={() => setShowPreview(false)}
         onWheel={handleWheel}
       >
         <div
-          className="preview-content"
+          className="relative max-w-[90vw] max-h-[85vh]"
           onClick={(e) => e.stopPropagation()}
-          style={{ position: "relative", textAlign: "center" }}
         >
-          {/* eslint-disable-next-line jsx-a11y/alt-text */}
+          <button
+            onClick={() => setShowPreview(false)}
+            className="absolute -top-10 right-0 text-white hover:text-red-400 transition-colors"
+          >
+            <X className="w-8 h-8" />
+          </button>
           <img
             src={task.imageUrl}
+            alt="Preview"
+            className="rounded-lg shadow-2xl object-contain w-full h-full"
             style={{
-              maxWidth: "90vw",
-              maxHeight: "80vh",
               transform: `scale(${zoomLevel})`,
-              transition: "transform 0.1s ease-out", // Smoother zoom transition
-              borderRadius: "8px",
+              transition: "transform 0.1s ease-out",
             }}
           />
         </div>
@@ -192,76 +169,94 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, updateTask, deleteTask, addNo
       ref={setNodeRef}
       style={style}
       {...attributes}
-      className="task-card"
+      className="group relative bg-neutral-900 border border-neutral-800 rounded-xl p-3 shadow-sm hover:shadow-md hover:border-neutral-700 hover:bg-neutral-800/50 transition-all duration-200"
     >
       {/* Task Image */}
       {task.imageUrl && !isDragging && (
-        <div className="task-image-container" style={{ marginBottom: "8px" }}>
-          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
+        <div className="relative mb-3 group/image overflow-hidden rounded-lg">
           <img
             src={task.imageUrl}
-            alt="Task attachment"
-            style={{
-              width: "100%",
-              height: "150px",
-              objectFit: "cover",
-              borderRadius: "4px",
-              cursor: "zoom-in",
-            }}
+            alt="Attachment"
+            className="w-full h-32 object-cover transition-transform duration-300 group-hover/image:scale-105"
             onClick={() => { setShowPreview(true); setZoomLevel(1); }}
           />
-          <button
-            className="task-image-remove-btn"
-            onClick={handleRemoveImage}
-            title="Remove Image"
-          >
-            ✕
-          </button>
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/image:opacity-100 transition-opacity flex items-center justify-center gap-2">
+            <button
+              className="p-1.5 bg-white/20 hover:bg-white/40 rounded-lg text-white backdrop-blur-sm transition-colors"
+              onClick={(e) => { e.stopPropagation(); setShowPreview(true); setZoomLevel(1); }}
+            >
+              <ZoomIn className="w-4 h-4" />
+            </button>
+            <button
+              className="p-1.5 bg-red-500/80 hover:bg-red-500 rounded-lg text-white backdrop-blur-sm transition-colors"
+              onClick={handleRemoveImage}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 
       {/* Edit mode: Show input field */}
       {isEditing ? (
-        <input
-          ref={inputRef}
-          type="text"
-          className="task-title-input"
-          value={editedTitle}
-          onChange={(e) => setEditedTitle(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onBlur={handleSave}
-        />
+        <div className="relative">
+          <textarea
+            // @ts-ignore
+            ref={inputRef}
+            className="w-full bg-neutral-950 border border-indigo-500/50 rounded p-2 text-sm text-white focus:outline-none resize-none min-h-[60px]"
+            value={editedTitle}
+            onChange={(e) => setEditedTitle(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={handleSave}
+            rows={2}
+          />
+          <div className="text-[10px] text-neutral-500 mt-1">Press Enter to save, Esc to cancel</div>
+        </div>
       ) : (
         /* View mode: Show title with drag handle */
-        <span className="task-title" {...listeners} style={{ cursor: "grab" }}>
-          {task.title}
-        </span>
+        <div className="flex flex-col gap-2">
+          <p
+            className="text-sm font-medium text-neutral-200 leading-snug break-words"
+            {...listeners}
+          >
+            {task.title}
+          </p>
+
+          {/* Action buttons (hidden until hover) */}
+          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pt-2 border-t border-neutral-800/50 mt-1">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="p-1.5 text-neutral-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded transition-colors"
+              title="Add Image"
+            >
+              <Image className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={handleEdit}
+              className="p-1.5 text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 rounded transition-colors"
+              title="Edit"
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => deleteTask(task.id)}
+              className="p-1.5 text-neutral-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+              title="Delete"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
       )}
 
-      {/* Action buttons (hidden during edit mode) */}
-      <div className="task-actions">
-        {!isEditing && (
-          <>
-            <button onClick={handleEdit} className="edit-btn">
-              ✏️ Edit
-            </button>
-            <button onClick={() => deleteTask(task.id)} className="delete-btn">
-              🗑 Delete
-            </button>
-            {/* Image Upload Button */}
-            <button onClick={() => fileInputRef.current?.click()} className="image-btn">
-              🖼️ Add Image
-            </button>
-            <input
-              type="file"
-              accept="image/*"
-              ref={fileInputRef}
-              style={{ display: "none" }}
-              onChange={handleImageUpload}
-            />
-          </>
-        )}
-      </div>
+      <input
+        type="file"
+        accept="image/*"
+        ref={fileInputRef}
+        style={{ display: "none" }}
+        onChange={handleImageUpload}
+      />
+
       {renderPreview()}
     </div>
   );

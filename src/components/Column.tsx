@@ -2,14 +2,7 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { useDroppable } from "@dnd-kit/core";
 import type { Task as TaskType } from "../types";
 import TaskCard from "./TaskCard";
-
-// ============================================================================
-// COLUMN COMPONENT
-// ============================================================================
-// Displays a column (Not Started, In Progress, or Done) containing tasks.
-// Supports drag-and-drop for reordering tasks and moving them between columns.
-// Highlights with green background when a task is being dragged over it.
-// ============================================================================
+import { MoreHorizontal } from "lucide-react";
 
 interface ColumnProps {
   title: string;
@@ -21,10 +14,6 @@ interface ColumnProps {
 }
 
 export default function Column({ title, tasks, moveTask, updateTask, deleteTask, addNotification }: ColumnProps) {
-  /**
-   * Setup droppable area for this column
-   * Passes column metadata so we can detect which column a task is dropped on
-   */
   const { setNodeRef, isOver } = useDroppable({
     id: title,
     data: {
@@ -33,19 +22,35 @@ export default function Column({ title, tasks, moveTask, updateTask, deleteTask,
     },
   });
 
-  return (
-    <div className="column">
-      <h2>{title}</h2>
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "Not Started": return "bg-neutral-800 text-neutral-400";
+      case "In Progress": return "bg-amber-900/30 text-amber-500 border-amber-900/50";
+      case "Done": return "bg-emerald-900/30 text-emerald-500 border-emerald-900/50";
+      default: return "bg-neutral-800 text-neutral-400";
+    }
+  };
 
-      {/* Droppable task list area with visual feedback */}
+  return (
+    <div className="flex flex-col w-80 shrink-0 h-full">
+      <div className="flex items-center justify-between mb-4 px-1">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-neutral-300 tracking-wide uppercase">{title}</h2>
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getStatusColor(title)}`}>
+            {tasks.length}
+          </span>
+        </div>
+        <button className="text-neutral-500 hover:text-white transition-colors">
+          <MoreHorizontal className="w-4 h-4" />
+        </button>
+      </div>
+
       <div
         ref={setNodeRef}
-        className="task-list"
-        style={{
-          backgroundColor: isOver ? "rgba(0, 255, 0, 0.1)" : undefined,
-        }}
+        className={`flex-1 rounded-xl transition-colors duration-200 flex flex-col gap-3 p-2
+          ${isOver ? "bg-neutral-800/50 ring-2 ring-indigo-500/50 ring-inset" : "bg-transparent"}
+        `}
       >
-        {/* SortableContext enables drag-and-drop reordering of tasks */}
         <SortableContext
           items={tasks.map((t) => t.id)}
           strategy={verticalListSortingStrategy}
@@ -61,6 +66,13 @@ export default function Column({ title, tasks, moveTask, updateTask, deleteTask,
             />
           ))}
         </SortableContext>
+
+        {/* Visual placeholder if empty */}
+        {tasks.length === 0 && !isOver && (
+          <div className="flex items-center justify-center h-32 border-2 border-dashed border-neutral-800 rounded-lg">
+            <span className="text-xs text-neutral-600 font-medium">Drop items here</span>
+          </div>
+        )}
       </div>
     </div>
   );
