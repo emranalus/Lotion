@@ -12,6 +12,7 @@ export type Project = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   createdAt?: any; // Firestore Timestamp
   order?: number;
+  githubUrl?: string;
 };
 
 export type Notification = {

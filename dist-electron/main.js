@@ -33,6 +33,15 @@ function createWindow() {
   } else {
     win.loadFile(path.join(RENDERER_DIST, "index.html"));
   }
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("https:") || url.startsWith("http:")) {
+      import("electron").then(({ shell }) => {
+        shell.openExternal(url);
+      });
+      return { action: "deny" };
+    }
+    return { action: "allow" };
+  });
 }
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {

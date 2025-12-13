@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, LogOut } from "lucide-react";
+import { Plus, LogOut, Github, Settings } from "lucide-react";
 import {
     DndContext,
     DragOverlay,
@@ -17,6 +17,7 @@ import Column from "./Column";
 import ToastContainer from "./ToastContainer";
 import ConfirmationModal from "./ConfirmationModal";
 import CreateTaskModal from "./CreateTaskModal";
+import EditProjectModal from "./EditProjectModal";
 import type { User } from "firebase/auth";
 import {
     getFirestore,
@@ -58,6 +59,7 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
     const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
+    const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
 
     // Drag and drop state
     const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -171,6 +173,17 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
         } catch (error) {
             console.error("Error renaming project:", error);
             addNotification("Failed to rename project", "error");
+        }
+    };
+
+    const updateProjectDetails = async (projectId: string, name: string, githubUrl: string) => {
+        try {
+            const projectRef = doc(db, "users", user.uid, "projects", projectId);
+            await updateDoc(projectRef, { name, githubUrl });
+            addNotification("Project updated", "success");
+        } catch (error) {
+            console.error("Error updating project:", error);
+            addNotification("Failed to update project", "error");
         }
     };
 
@@ -406,9 +419,35 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
                     <div className="app-container h-full flex flex-col z-10">
                         <header className="px-8 py-6 shrink-0 flex items-center justify-between">
                             <div>
-                                <h2 className="text-2xl font-bold text-white tracking-tight">
-                                    {projects.find(p => p.id === activeProjectId)?.name || "Dashboard"}
-                                </h2>
+                                <div className="flex items-center gap-3 group">
+                                    <h2 className="text-2xl font-bold text-white tracking-tight">
+                                        {projects.find(p => p.id === activeProjectId)?.name || "Dashboard"}
+                                    </h2>
+
+                                    {activeProjectId && (
+                                        <>
+                                            {projects.find(p => p.id === activeProjectId)?.githubUrl && (
+                                                <a
+                                                    href={projects.find(p => p.id === activeProjectId)?.githubUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-neutral-500 hover:text-white transition-colors"
+                                                    title="Open GitHub Repository"
+                                                >
+                                                    <Github className="w-5 h-5" />
+                                                </a>
+                                            )}
+
+                                            <button
+                                                onClick={() => setIsEditProjectModalOpen(true)}
+                                                className="text-neutral-600 hover:text-neutral-400 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                                title="Project Settings"
+                                            >
+                                                <Settings className="w-5 h-5" />
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
                                 <p className="text-sm text-neutral-500 mt-1">Manage your tasks and progress</p>
                             </div>
 
@@ -476,6 +515,18 @@ const MainApp: React.FC<MainAppProps> = ({ user, onSignOut }) => {
                 isOpen={isCreateTaskModalOpen}
                 onClose={() => setIsCreateTaskModalOpen(false)}
                 onCreate={addTask}
+            />
+
+            <EditProjectModal
+                isOpen={isEditProjectModalOpen}
+                onClose={() => setIsEditProjectModalOpen(false)}
+                onSave={(name, githubUrl) => {
+                    if (activeProjectId) {
+                        updateProjectDetails(activeProjectId, name, githubUrl);
+                    }
+                }}
+                currentName={projects.find(p => p.id === activeProjectId)?.name || ""}
+                currentGithubUrl={projects.find(p => p.id === activeProjectId)?.githubUrl}
             />
 
             <DragOverlay dropAnimation={{ duration: 0 }}>

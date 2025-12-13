@@ -57,6 +57,17 @@ function createWindow() {
         // win.loadFile('dist/index.html')
         win.loadFile(path.join(RENDERER_DIST, 'index.html'))
     }
+
+    // Handlers for external links
+    win.webContents.setWindowOpenHandler(({ url }) => {
+        if (url.startsWith('https:') || url.startsWith('http:')) {
+            import('electron').then(({ shell }) => {
+                shell.openExternal(url)
+            })
+            return { action: 'deny' }
+        }
+        return { action: 'allow' }
+    })
 }
 
 // Quit when all windows are closed, except on macOS. There, it's common

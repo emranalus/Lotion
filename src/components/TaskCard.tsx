@@ -202,7 +202,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, updateTask, deleteTask, addNo
       {isEditing ? (
         <div className="relative pointer-events-auto" onPointerDown={(e) => e.stopPropagation()}>
           <textarea
-            // @ts-ignore
+            // @ts-expect-error: inputRef type mismatch
             ref={inputRef}
             className="w-full bg-neutral-950 border border-indigo-500/50 rounded p-2 text-sm text-white focus:outline-none resize-none min-h-[60px]"
             value={editedTitle}
